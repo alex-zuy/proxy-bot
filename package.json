@@ -8,7 +8,9 @@
     "start": "node src/skype/app.js"
   },
   "dependencies": {
+    "bluebird": "^3.5.1",
     "botbuilder": "^3.11.0",
+    "redis": "^2.8.0",
     "restify": "^6.2.3"
   },
   "engines": {
