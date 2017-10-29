@@ -1,0 +1,11 @@
+{
+  "name": "proxy-bot",
+  "version": "1.0.0",
+  "main": "index.js",
+  "author": "Alexey Zuy",
+  "license": "MIT",
+  "dependencies": {
+    "botbuilder": "^3.11.0",
+    "restify": "^6.2.3"
+  }
+}
