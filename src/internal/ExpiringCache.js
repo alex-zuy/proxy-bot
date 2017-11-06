@@ -16,8 +16,8 @@ module.exports = function ExpiringCache() {
         if(entry.value instanceof Promise) {
             return entry.value;
         } else {
-            const isExpired = entry.expirationPredicate(entry.value);
-            if(isExpired) {
+            const isNotExpired = entry.expirationPredicate(entry.value);
+            if(!isNotExpired) {
                 await calculateEntry(key);
             }
             return entry.value;

@@ -5,23 +5,22 @@
   "author": "Alexey Zuy",
   "license": "MIT",
   "scripts": {
-    "start": "node src/skype/app.js"
+    "heroku-prebuild": "./install-libwebp.sh",
+    "start": "node src/app.js"
   },
   "dependencies": {
     "async-eventemitter": "^0.2.4",
-    "bluebird": "^3.5.1",
-    "botbuilder": "^3.11.0",
+    "bottlejs": "^1.6.1",
     "dotenv": "^4.0.0",
     "express": "^4.16.2",
     "lodash": "^4.17.4",
     "moment": "^2.0.0",
     "node-fetch": "^1.7.3",
-    "promise-queue": "^2.2.3",
-    "redis": "^2.8.0",
-    "restify": "^6.2.3"
+    "pg": "^7.4.0",
+    "pg-large-object": "^2.0.0"
   },
   "engines": {
-    "node": "7.10.0",
+    "node": "8.9.1",
     "npm": "4.2.0"
   },
   "devDependencies": {

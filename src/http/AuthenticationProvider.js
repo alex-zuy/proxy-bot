@@ -1,12 +1,12 @@
 const fetch = require('node-fetch');
 const querystring = require('querystring');
 const moment = require('moment');
-const ExpiringCache = require('../../internal/ExpiringCache');
+const ExpiringCache = require('../internal/ExpiringCache');
 
 const JWT_TOKEN = 'jwtToken';
 const OPENID_DOCUMENT = 'openIdDocument';
 
-module.exports = class BotApi {
+module.exports = class AuthenticationProvider {
 
     constructor(options) {
         this.appId = options.appId;
@@ -40,33 +40,7 @@ module.exports = class BotApi {
             });
     }
 
-    async publishActivity(activity) {
-        const header = await this._getAuthenticationHeader();
-        const baseUrl = activity.serviceUrl;
-        const conversationId = activity.conversation.id;
-        const activityId = activity.id;
-        const result = await fetch(`${baseUrl}/v3/conversations/${conversationId}/activities/${activityId}`, {
-            method: 'POST',
-            headers: Object.assign(
-                {'Content-Type': 'application/json'},
-                header
-            ),
-            body: JSON.stringify({
-                type: 'message',
-                recipient: activity.from,
-                from: activity.recipient,
-                channelId: activity.channelId,
-                text: `You said ${activity.text}`,
-                conversation: activity.conversation,
-                replyToId: activity.id,
-                attachments: activity.attachments
-            })
-        });
-
-        console.log('Reply result: ' + result.statusText + 'Details:\n' + await result.text());
-    }
-
-    async _getAuthenticationHeader() {
+    async getAuthenticationHeader() {
         const token = await this._getJwtToken();
         return {'Authorization': `Bearer ${token.access_token}`};
     }
