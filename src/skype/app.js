@@ -1,86 +1,81 @@
-const restify = require('restify');
-const builder = require('botbuilder');
-const valueStore = require('./inMemoryValueStore');
+require('dotenv').config();
+const AsyncEventEmitter = require('async-eventemitter');
+const _ = require('lodash');
 
-const CHANNEL_IDS = {
-    SKYPE: 'skype',
-    TELEGRAM: 'telegram'
-};
+const Api = require('./api/BotApi');
+const Listener = require('./api/ActivitiesListener');
+const ActivitiesRouter = require('./api/ActivitiesRouter');
+// const Publisher = require('./api/ActivitiesPublisher');
+const ChannelIds = require('./ChannelIds');
 
-const STORAGE_KEYS = {
-    SKYPE_ADDRESS: 'skypeAddress',
-    TELEGRAM_ADDRESS: 'telegramAddress'
-};
-
-// Setup Restify Server
-const server = restify.createServer();
-server.listen(process.env.port || process.env.PORT || 3978, function () {
-    console.log('%s listening to %s', server.name, server.url);
-});
-
-// Create chat connector for communicating with the Bot Framework Service
-const connector = new builder.ChatConnector({
+const api = new Api({
     appId: process.env.MICROSOFT_APP_ID,
-    appPassword: process.env.MICROSOFT_APP_PASSWORD
+    password: process.env.MICROSOFT_APP_PASSWORD
 });
 
-// Listen for messages from users 
-server.post('/api/messages', connector.listen());
+const router = new ActivitiesRouter(api);
 
-// Receive messages from the user and respond by echoing each message back (prefixed with 'You said:')
-const bot = new builder.UniversalBot(connector, function (session) {
-    const incomingMessage = session.message;
-    const incomingAddress = incomingMessage.address;
-    console.log(`Incoming message from address: ${JSON.stringify(incomingAddress)}`);
-
-    switch (incomingAddress.channelId) {
-
-        case CHANNEL_IDS.SKYPE: {
-            valueStore.set(STORAGE_KEYS.SKYPE_ADDRESS, incomingAddress);
-            const telegramAddress = valueStore.get(STORAGE_KEYS.TELEGRAM_ADDRESS);
-            if(telegramAddress !== null) {
-                const outgoingMessage = new builder.Message();
-                outgoingMessage.address(telegramAddress);
-                outgoingMessage.text(incomingMessage.text);
-                copyMessageContent(incomingMessage, outgoingMessage);
-                bot.send(outgoingMessage);
-            } else {
-                const message = new builder.Message()
-                    .address(incomingAddress)
-                    .text('Skype address saved. Telegram address is not known yet.');
-                bot.send(message);
-            }
-            break;
-        }
-
-        case CHANNEL_IDS.TELEGRAM: {
-            valueStore.set(STORAGE_KEYS.TELEGRAM_ADDRESS, incomingAddress);
-            const skypeAddress = valueStore.get(STORAGE_KEYS.SKYPE_ADDRESS)
-            if (skypeAddress !== null) {
-                const outgoingMessage = new builder.Message();
-                outgoingMessage.address(skypeAddress);
-                outgoingMessage.text(`${getAuthorName(incomingAddress)} wrote:\n${incomingMessage.text}`);
-                copyMessageContent(incomingMessage, outgoingMessage);
-                bot.send(outgoingMessage);
-            } else {
-                const message = new builder.Message()
-                    .address(incomingAddress)
-                    .text('Telegram address saved. Skype address is not known yet.');
-                bot.send(message);
-            }
-            break;
-        }
-
-        default:
-            console.log('Message from unknown channel received.'
-                + ` Text: ${incomingMessage.text}, Address: ${JSON.stringify(incomingAddress)}`);
-    }
+const listener = new Listener({
+    urlPath: '/api/messages',
+    port: process.env.PORT
 });
 
-function copyMessageContent(source, destination) {
-    //TODO we need to somehow copy contents
-}
+const emitter = new AsyncEventEmitter();
 
-function getAuthorName(address) {
-    return address.user.name;
-}
+const eventEmittingHandler = ((() => {
+    let skypeAddress = null;
+    let telegramAddress = null;
+
+    const getAddressFromActivity = (activity) => ({receiver: activity.from, conversation: activity.conversation});
+
+    return activity => {
+        if(activity.type !== 'message') {
+            return;
+        }
+
+        switch (activity.channelId) {
+            case ChannelIds.SKYPE: {
+                if (skypeAddress === null || !_.eq(skypeAddress, getAddressFromActivity(activity))) {
+                    skypeAddress = getAddressFromActivity(activity);
+                    emitter.emit('skypeAddressUpdated', skypeAddress);
+                }
+                emitter.emit('skypeActivity', activity);
+                break;
+            }
+            case ChannelIds.TELEGRAM: {
+                if (telegramAddress === null || !_.eq(telegramAddress, getAddressFromActivity(activity))) {
+                    telegramAddress = getAddressFromActivity(activity);
+                    emitter.emit('telegramAddressUpdated', telegramAddress);
+                }
+                emitter.emit('telegramActivity', activity);
+                break;
+            }
+            default:
+                console.log('Unknown channelId:' + activity.channelId);
+        }
+    };
+})());
+
+listener.addActivitiesHandler(activity => {
+    console.log(activity);
+});
+
+listener.addActivitiesHandler(eventEmittingHandler);
+
+emitter.on('telegramAddressUpdated', (address) => {
+    router.onTelegramReceiverAddressChanged(address)
+});
+
+emitter.on('skypeAddressUpdated', (address) => {
+    router.onSkypeReceiverAddressChanged(address);
+});
+
+emitter.on('skypeActivity', (activity, next) => {
+    router.onSkypeActivity(activity).then(next).catch(next)
+});
+
+emitter.on('telegramActivity', (activity, next) => {
+    router.onTelegramActivity(activity).then(next).catch(next);
+});
+
+listener.startListening();
